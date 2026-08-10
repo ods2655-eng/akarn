@@ -276,9 +276,11 @@
 
   // ── 스케줄 ──
   function computeRingTimes(hh, mm) {
-    const now = new Date(), first = new Date();
+    const now = Date.now(), first = new Date();
     first.setHours(hh, mm, 0, 0);
-    if (first.getTime() <= now.getTime() - 1000) first.setDate(first.getDate() + 1);
+    const span = (COUNT - 1) * INTERVAL_MIN * 60000;   // 첫~마지막 알람 간격
+    // 4회 전체가 이미 지났을 때만 다음 날로 (일부만 지났으면 오늘 유지 → 늦게 접속해도 남은 회차 동기화)
+    if (first.getTime() + span <= now - 1000) first.setDate(first.getDate() + 1);
     const arr = [];
     for (let i = 0; i < COUNT; i++) arr.push(new Date(first.getTime() + i * INTERVAL_MIN * 60000));
     return arr;
@@ -288,6 +290,12 @@
   function fmtRemain(s) {            // 60분 넘어도 안 깨지게 H:MM:SS
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     return (h > 0 ? h + ":" + two(m) : two(m)) + ":" + two(sec);
+  }
+  function dayTag(d) {              // 오늘이 아니면 (내일)/(M/D) 표시 → 기기 간 날짜 불일치 즉시 확인
+    const now = new Date(), tmr = new Date(); tmr.setDate(now.getDate() + 1);
+    if (d.toDateString() === now.toDateString()) return "";
+    if (d.toDateString() === tmr.toDateString()) return " (내일)";
+    return ` (${d.getMonth() + 1}/${d.getDate()})`;
   }
 
   function renderSched() {
@@ -336,7 +344,7 @@
         statusEl.innerHTML =
           `<span class="cd-label">다음 알람까지 (${remainIdx}/${COUNT}회)</span>` +
           `<span class="cd-time">${fmtRemain(s)}</span>` +
-          `<span class="cd-next">${hm(next)} 예정</span>`;
+          `<span class="cd-next">${hm(next)}${dayTag(next)} 예정</span>`;
       } else if (firedIdx >= COUNT - 1) {
         statusEl.className = "status idle";
         statusEl.textContent = "✅ 4회 알람 완료";
@@ -369,12 +377,18 @@
   }
   // 스케줄만 설정(소리 불필요) — 공유 링크 자동 셋팅/버튼 공용
   function armSchedule(hh, mm) {
-    ringTimes = computeRingTimes(hh, mm); firedIdx = -1; armed = true;
+    ringTimes = computeRingTimes(hh, mm);
+    // 늦게 접속한 사람: 이미 지난 회차는 울리지 않도록 firedIdx 초기화 → 남은 회차만 동기화
+    const now = Date.now();
+    firedIdx = -1;
+    for (let i = 0; i < ringTimes.length; i++) { if (ringTimes[i].getTime() <= now) firedIdx = i; }
+    armed = true;
     requestWake();
     armBtn.style.display = "none"; disarmBtn.style.display = "";
     renderSched();
     statusEl.className = "status";
-    statusEl.textContent = `설정됨 · 첫 알람 ${hm(ringTimes[0])}`;
+    const nextT = ringTimes.find((d) => d.getTime() > now) || ringTimes[0];
+    statusEl.textContent = `설정됨 · 다음 알람 ${hm(nextT)}`;
   }
   // 공유받은 사람: 셋팅 없이 자동 무장. 소리만 첫 탭에서 켜지도록 안내+대기
   function autoArmFromLink(hh, mm) {
