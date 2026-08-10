@@ -83,6 +83,17 @@
   }
   .gear:active { transform: scale(.94); }
 
+  /* 소리 켜기 안내 배너 */
+  .sound-hint {
+    position: fixed; left: 50%; bottom: 4vmin; transform: translateX(-50%);
+    z-index: 25; display: none; max-width: 92vw; text-align: center;
+    background: var(--accent); color: #fff; font-weight: 700;
+    font-size: 3.4vmin; padding: 2vmin 4vmin; border-radius: 999px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.3); animation: hintpulse 1.4s ease-in-out infinite;
+  }
+  .sound-hint.on { display: block; }
+  @keyframes hintpulse { 0%,100% { opacity: 1; } 50% { opacity: .7; } }
+
   /* ── 설정 패널(기본 숨김) ── */
   .panel {
     position: fixed; inset: 0; z-index: 30; display: none;
@@ -145,6 +156,9 @@
 <!-- 설정 열기 -->
 <button class="gear" id="gear" title="설정">⚙</button>
 
+<!-- 소리 켜기 안내(공유 링크로 자동 셋팅된 경우) -->
+<div class="sound-hint" id="soundHint">🔊 소리를 켜려면 화면을 한 번 터치/클릭하세요</div>
+
 <!-- 설정 패널 -->
 <div class="panel" id="panel">
   <div class="box">
@@ -158,11 +172,12 @@
     <button id="share" class="btn-sub">🔗 이 시작 시각으로 공유 링크 복사</button>
     <ul class="sched" id="sched"></ul>
     <div class="hint">
-      · 여러 기기가 <b>같은 시작 시각</b>으로 각자 “알람 시작”을 누르면
-        기기 시계 기준으로 <b>동시에</b> 울립니다 (10분 간격 4회).<br>
-      · 시작 시각이 지났으면 <b>다음 날 같은 시각</b>으로 잡힙니다.<br>
-      · 모바일은 “알람 시작” 1회 터치가 있어야 소리가 납니다(브라우저 정책).
-        화면은 켜진 상태로 유지됩니다.
+      · <b>관리자</b>: 시작 시각 입력 → “알람 시작” → “🔗 공유 링크 복사”로 링크 배포.<br>
+      · <b>공유받은 사람</b>: 링크만 열면 <b>셋팅 없이 자동으로</b> 같은 시각 알람이 걸립니다.
+        (기기 시계 기준으로 <b>동시에</b> 울림 · 10분 간격 4회)<br>
+      · 소리만은 브라우저 정책상 <b>화면을 한 번 터치/클릭</b>해야 켜집니다
+        (안내 배너가 뜸). 화면은 켜진 상태로 유지됩니다.<br>
+      · 시작 시각이 지났으면 <b>다음 날 같은 시각</b>으로 잡힙니다.
     </div>
     <div class="hint" id="warnCtx" style="display:none; color:var(--warn)">
       ⚠️ 지금 주소에서는 <b>화면 절전 방지가 동작하지 않습니다</b>
@@ -184,11 +199,11 @@
   const clockEl = $("clock"), secEl = $("sec"), statusEl = $("status"), nowDateEl = $("nowDate");
   const startEl = $("start"), schedEl = $("sched");
   const armBtn = $("arm"), disarmBtn = $("disarm"), shareBtn = $("share");
-  const gearBtn = $("gear"), panel = $("panel"), closeBtn = $("close");
+  const gearBtn = $("gear"), panel = $("panel"), closeBtn = $("close"), soundHint = $("soundHint");
   const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg");
   const WEEK = ["일","월","화","수","목","금","토"];
 
-  let audioCtx = null, armed = false, ringTimes = [], firedIdx = -1, wakeLock = null;
+  let audioCtx = null, armed = false, ringTimes = [], firedIdx = -1, wakeLock = null, audioUnlocked = false;
 
   // ── 오디오 ──
   function ensureAudio() {
@@ -342,17 +357,40 @@
     const v = startEl.value; if (!v) return null;
     const [h, m] = v.split(":").map(Number); return { h, m };
   }
-  armBtn.addEventListener("click", () => {
-    const t = parseTimeInput();
-    if (!t) { statusEl.className = "status idle"; statusEl.textContent = "시작 시각을 입력하세요"; return; }
-    ensureAudio();
-    beepOnce(audioCtx.currentTime + 0.01, 0.02, 440); // 오디오 잠금 해제
-    ringTimes = computeRingTimes(t.h, t.m); firedIdx = -1; armed = true;
+  // 오디오 잠금 해제 — 사용자 제스처가 있어야 소리 재생 가능
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    try {
+      ensureAudio();
+      beepOnce(audioCtx.currentTime + 0.05, 0.05, 880);
+      audioUnlocked = true;
+      soundHint.classList.remove("on");
+    } catch (e) {}
+  }
+  // 스케줄만 설정(소리 불필요) — 공유 링크 자동 셋팅/버튼 공용
+  function armSchedule(hh, mm) {
+    ringTimes = computeRingTimes(hh, mm); firedIdx = -1; armed = true;
     requestWake();
     armBtn.style.display = "none"; disarmBtn.style.display = "";
     renderSched();
     statusEl.className = "status";
     statusEl.textContent = `설정됨 · 첫 알람 ${hm(ringTimes[0])}`;
+  }
+  // 공유받은 사람: 셋팅 없이 자동 무장. 소리만 첫 탭에서 켜지도록 안내+대기
+  function autoArmFromLink(hh, mm) {
+    armSchedule(hh, mm);
+    if (!audioUnlocked) {
+      soundHint.classList.add("on");
+      const onGesture = () => { unlockAudio(); };
+      window.addEventListener("pointerdown", onGesture, { once: true });
+      window.addEventListener("keydown", onGesture, { once: true });
+    }
+  }
+  armBtn.addEventListener("click", () => {
+    const t = parseTimeInput();
+    if (!t) { statusEl.className = "status idle"; statusEl.textContent = "시작 시각을 입력하세요"; return; }
+    unlockAudio();
+    armSchedule(t.h, t.m);
     panel.classList.remove("on"); // 큰 화면으로 복귀
   });
   disarmBtn.addEventListener("click", () => {
@@ -360,6 +398,7 @@
     if (wakeLock) { wakeLock.release(); wakeLock = null; }
     stopTitleBlink();                       // 정지 시 탭 제목 깜빡임도 즉시 중지
     overlay.classList.remove("on");
+    soundHint.classList.remove("on");
     armBtn.style.display = ""; disarmBtn.style.display = "none";
     schedEl.innerHTML = "";
     statusEl.className = "status idle"; statusEl.textContent = "우측 ⚙ 에서 알람을 설정하세요";
@@ -376,8 +415,12 @@
   // ── 초기값 ──
   (function init() {
     const q = new URLSearchParams(location.search).get("t");
-    if (q && /^\d{1,2}:\d{2}$/.test(q)) startEl.value = q.length === 4 ? "0" + q : q;
-    else {
+    if (q && /^\d{1,2}:\d{2}$/.test(q)) {
+      const v = q.length === 4 ? "0" + q : q;
+      startEl.value = v;
+      const [h, m] = v.split(":").map(Number);
+      autoArmFromLink(h, m);   // 공유 링크로 열면 셋팅 없이 자동 무장
+    } else {
       const d = new Date();
       d.setMinutes(Math.ceil((d.getMinutes() + 1) / 10) * 10, 0, 0);
       startEl.value = hm(d);
