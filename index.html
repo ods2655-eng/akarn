@@ -246,7 +246,7 @@
     <div id="connectStep2" style="display:none">
       <div class="connect-check">✅</div>
       <div class="connect-title">연결 완료!</div>
-      <div class="connect-msg">타이머가 설정되었습니다.<br>시작 시각에 함께 알람이 울립니다.</div>
+      <div class="connect-msg">첫번째 알람이 곧 시작됩니다<br>화이팅!</div>
     </div>
   </div>
 </div>
@@ -484,16 +484,19 @@
     try {
       const ctx = ensureAudio();
       const t0 = ctx.currentTime + 0.03;
+      const master = ctx.createGain();      // 전체 음량 부스트(클리핑 방지 겸용)
+      master.gain.value = 0.9;
+      master.connect(ctx.destination);
       [[523.25, 0], [659.25, 0.13], [783.99, 0.26]].forEach(([f, dt]) => {  // C5-E5-G5
         const o = ctx.createOscillator(), g = ctx.createGain(), s = t0 + dt;
         o.type = "sine"; o.frequency.value = f;
         g.gain.setValueAtTime(0.0001, s);
-        g.gain.exponentialRampToValueAtTime(0.3, s + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, s + 0.3);
-        o.connect(g).connect(ctx.destination);
-        o.start(s); o.stop(s + 0.32);
+        g.gain.exponentialRampToValueAtTime(0.85, s + 0.02);   // 0.3 → 0.85 (더 크게)
+        g.gain.exponentialRampToValueAtTime(0.0001, s + 0.35);
+        o.connect(g).connect(master);
+        o.start(s); o.stop(s + 0.37);
       });
-      if (navigator.vibrate) navigator.vibrate(120);
+      if (navigator.vibrate) navigator.vibrate([100, 60, 100]);
     } catch (e) {}
   }
   // 접속 안내 "확인" → 소리 켜기(사용자 제스처) + 완료음 + 완료 화면
