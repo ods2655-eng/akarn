@@ -155,6 +155,12 @@
   .connect-msg { font-size: 4.4vmin; line-height: 1.5; margin-bottom: 4vmin;
     word-break: keep-all; }
   #connectOk { font-size: 4.6vmin; padding: 3vmin; }
+  .connect-check { font-size: 20vmin; line-height: 1; animation: checkpop .4s ease-out; }
+  @keyframes checkpop {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); }
+  }
 
   /* QR 팝업 */
   .qr-popup {
@@ -229,10 +235,19 @@
 <!-- 접속(QR 연결) 안내 팝업 -->
 <div class="connect-popup" id="connectPopup">
   <div class="connect-box">
-    <div class="connect-emoji">⏱️</div>
-    <div class="connect-title">코너 타이머가 시작됩니다</div>
-    <div class="connect-msg">조장은 조의 모든 친구들이 있는지 확인하고<br>이동을 준비해주세요</div>
-    <button id="connectOk">확인 · 소리 켜기 🔊</button>
+    <!-- 1단계: 안내 -->
+    <div id="connectStep1">
+      <div class="connect-emoji">⏱️</div>
+      <div class="connect-title">코너 타이머가 시작됩니다</div>
+      <div class="connect-msg">조장은 조의 모든 친구들이 있는지 확인하고<br>이동을 준비해주세요</div>
+      <button id="connectOk">확인 · 소리 켜기 🔊</button>
+    </div>
+    <!-- 2단계: 완료 -->
+    <div id="connectStep2" style="display:none">
+      <div class="connect-check">✅</div>
+      <div class="connect-title">연결 완료!</div>
+      <div class="connect-msg">타이머가 설정되었습니다.<br>시작 시각에 함께 알람이 울립니다.</div>
+    </div>
   </div>
 </div>
 
@@ -263,6 +278,7 @@
   const armBtn = $("arm"), disarmBtn = $("disarm"), shareBtn = $("share");
   const gearBtn = $("gear"), panel = $("panel"), closeBtn = $("close"), soundHint = $("soundHint");
   const connectPopup = $("connectPopup"), connectOk = $("connectOk");
+  const connectStep1 = $("connectStep1"), connectStep2 = $("connectStep2");
   const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg");
   const WEEK = ["일","월","화","수","목","금","토"];
 
@@ -463,11 +479,31 @@
       window.addEventListener("keydown", onGesture, { once: true });
     }
   }
-  // 접속 안내 "확인" → 소리 켜기(사용자 제스처) + 팝업 닫기
+  // 완료 알림음 — 부드러운 상행 3음(딩-딩-딩)
+  function playDone() {
+    try {
+      const ctx = ensureAudio();
+      const t0 = ctx.currentTime + 0.03;
+      [[523.25, 0], [659.25, 0.13], [783.99, 0.26]].forEach(([f, dt]) => {  // C5-E5-G5
+        const o = ctx.createOscillator(), g = ctx.createGain(), s = t0 + dt;
+        o.type = "sine"; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, s);
+        g.gain.exponentialRampToValueAtTime(0.3, s + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, s + 0.3);
+        o.connect(g).connect(ctx.destination);
+        o.start(s); o.stop(s + 0.32);
+      });
+      if (navigator.vibrate) navigator.vibrate(120);
+    } catch (e) {}
+  }
+  // 접속 안내 "확인" → 소리 켜기(사용자 제스처) + 완료음 + 완료 화면
   connectOk.addEventListener("click", () => {
     unlockAudio();
-    connectPopup.classList.remove("on");
+    playDone();                                // ✅ 완료 알림음
+    connectStep1.style.display = "none";
+    connectStep2.style.display = "";           // 체크표시 + 완료 문구
     if (!audioUnlocked) soundHint.classList.add("on");  // 혹시 소리 못 켰으면 배너로 재안내
+    setTimeout(() => connectPopup.classList.remove("on"), 2200);  // 2.2초 뒤 자동 닫힘
   });
   armBtn.addEventListener("click", () => {
     const t = parseTimeInput();
