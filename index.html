@@ -126,6 +126,12 @@
   button.stop { background: #444a57; }
   .btn-sub { background: transparent; color: var(--accent); font-size: 14px;
     padding: 10px; margin-top: 6px; font-weight: 600; }
+  .sound-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer;
+    margin: 12px 0 4px; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 10px; min-width: 0; font-size: 16px; color: var(--fg); }
+  .sound-toggle input { width: 22px; height: 22px; accent-color: var(--accent); cursor: pointer; }
+  .sound-toggle #soundState { color: var(--ok); }
+  .sound-toggle.off #soundState { color: var(--muted); }
   ul.sched { list-style: none; padding: 0; margin: 12px 0 0; }
   ul.sched li {
     display: flex; justify-content: space-between; align-items: center;
@@ -214,6 +220,10 @@
     </div>
     <button id="arm">알람 시작</button>
     <button id="disarm" class="stop" style="display:none">알람 정지</button>
+    <label class="sound-toggle">
+      <input type="checkbox" id="soundToggle" checked>
+      <span>🔔 알림 소리 <b id="soundState">켜짐</b></span>
+    </label>
     <button id="share" class="btn-sub">🔗 공유 링크 · QR 코드 만들기</button>
     <ul class="sched" id="sched"></ul>
     <div class="hint">
@@ -279,6 +289,7 @@
   const gearBtn = $("gear"), panel = $("panel"), closeBtn = $("close"), soundHint = $("soundHint");
   const connectPopup = $("connectPopup"), connectOk = $("connectOk");
   const connectStep1 = $("connectStep1"), connectStep2 = $("connectStep2");
+  const soundToggle = $("soundToggle"), soundState = $("soundState");
   const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg");
   const WEEK = ["일","월","화","수","목","금","토"];
 
@@ -305,10 +316,17 @@
     osc.start(when); osc.stop(when + dur + 0.02);
   }
   function ring() {
-    const ctx = ensureAudio(), t0 = ctx.currentTime + 0.05;
-    for (let i = 0; i < BEEP_TIMES; i++) beepOnce(t0 + i * 0.5, 0.28, i % 2 ? 660 : 880);
+    if (soundToggle.checked) {   // 알림 소리 on/off (관리자 체크박스)
+      const ctx = ensureAudio(), t0 = ctx.currentTime + 0.05;
+      for (let i = 0; i < BEEP_TIMES; i++) beepOnce(t0 + i * 0.5, 0.28, i % 2 ? 660 : 880);
+    }
     if (navigator.vibrate) navigator.vibrate([250,150,250,150,250,150,250]);
   }
+  soundToggle.addEventListener("change", () => {
+    const on = soundToggle.checked;
+    soundState.textContent = on ? "켜짐" : "꺼짐";
+    soundToggle.closest(".sound-toggle").classList.toggle("off", !on);
+  });
   function showOverlay(n) {
     overlayMsg.textContent = MESSAGES[n - 1] || MOVE_MSG;   // 회차별 문구
     overlaySub.textContent = `${n}회 / ${COUNT}회`;
