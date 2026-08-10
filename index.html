@@ -136,6 +136,26 @@
   li.done { opacity: .45; } li.done .t { text-decoration: line-through; }
   li.next .t { color: var(--accent); font-weight: 700; }
   .hint { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 12px; }
+
+  /* QR 팝업 */
+  .qr-popup {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(0,0,0,.6);
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .qr-popup.on { display: flex; }
+  .qr-popup .qr-box {
+    width: 100%; max-width: 360px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 16px; padding: 20px;
+    text-align: center; max-height: 92vh; overflow: auto;
+  }
+  .qr-popup h2 { margin: 0 0 14px; font-size: 18px; display: flex;
+    justify-content: space-between; align-items: center; }
+  .qr-img-wrap { background: #fff; border-radius: 12px; padding: 14px;
+    display: inline-block; line-height: 0; }
+  .qr-img-wrap img { width: 260px; height: 260px; max-width: 70vw; max-height: 70vw; display: block; }
+  .qr-link { font-size: 13px; color: var(--muted); word-break: break-all;
+    margin: 14px 0; font-family: ui-monospace, monospace; }
 </style>
 
 <!-- 대형 디스플레이 -->
@@ -169,7 +189,7 @@
     </div>
     <button id="arm">알람 시작</button>
     <button id="disarm" class="stop" style="display:none">알람 정지</button>
-    <button id="share" class="btn-sub">🔗 이 시작 시각으로 공유 링크 복사</button>
+    <button id="share" class="btn-sub">🔗 공유 링크 · QR 코드 만들기</button>
     <ul class="sched" id="sched"></ul>
     <div class="hint">
       · <b>관리자</b>: 시작 시각 입력 → “알람 시작” → “🔗 공유 링크 복사”로 링크 배포.<br>
@@ -183,6 +203,19 @@
       ⚠️ 지금 주소에서는 <b>화면 절전 방지가 동작하지 않습니다</b>
       (https 또는 localhost가 아님). 화면이 꺼지면 알람이 안 울릴 수 있으니,
       기기의 화면 자동꺼짐을 꺼두거나 https/localhost로 접속하세요.
+    </div>
+  </div>
+</div>
+
+<!-- QR 코드 팝업 -->
+<div class="qr-popup" id="qrPopup">
+  <div class="qr-box">
+    <h2>스캔해서 접속 <button class="close" id="qrClose">×</button></h2>
+    <div class="qr-img-wrap"><img id="qrImg" alt="QR 코드"></div>
+    <div class="qr-link" id="qrLink"></div>
+    <button id="qrCopy">🔗 링크 복사</button>
+    <div class="hint" id="qrErr" style="display:none; color:var(--warn)">
+      ⚠️ QR 이미지를 불러오지 못했습니다(인터넷 확인). 아래 링크를 직접 전달하세요.
     </div>
   </div>
 </div>
@@ -417,13 +450,30 @@
     schedEl.innerHTML = "";
     statusEl.className = "status idle"; statusEl.textContent = "우측 ⚙ 에서 알람을 설정하세요";
   });
-  shareBtn.addEventListener("click", async () => {
+  // ── 공유: QR 코드 팝업 ──
+  const qrPopup = $("qrPopup"), qrImg = $("qrImg"), qrLink = $("qrLink"),
+        qrCopy = $("qrCopy"), qrClose = $("qrClose"), qrErr = $("qrErr");
+  function shareUrl() {
     const v = startEl.value;
-    if (!v) return;
-    const url = location.origin + location.pathname + "?t=" + encodeURIComponent(v);
-    try { await navigator.clipboard.writeText(url); shareBtn.textContent = "✅ 링크 복사됨"; }
-    catch (e) { shareBtn.textContent = url; }
-    setTimeout(() => shareBtn.textContent = "🔗 이 시작 시각으로 공유 링크 복사", 2500);
+    if (!v) return null;
+    return location.origin + location.pathname + "?t=" + encodeURIComponent(v);
+  }
+  shareBtn.addEventListener("click", () => {
+    const url = shareUrl();
+    if (!url) { statusEl.className = "status idle"; statusEl.textContent = "시작 시각을 입력하세요"; return; }
+    qrLink.textContent = url;
+    qrErr.style.display = "none";
+    qrImg.style.display = "";
+    qrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=520x520&margin=10&data=" + encodeURIComponent(url);
+    qrPopup.classList.add("on");
+  });
+  qrImg.addEventListener("error", () => { qrImg.style.display = "none"; qrErr.style.display = ""; });
+  qrClose.addEventListener("click", () => qrPopup.classList.remove("on"));
+  qrPopup.addEventListener("click", (e) => { if (e.target === qrPopup) qrPopup.classList.remove("on"); });
+  qrCopy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(qrLink.textContent); qrCopy.textContent = "✅ 복사됨"; }
+    catch (e) { qrCopy.textContent = "복사 실패 — 링크를 길게 눌러 복사"; }
+    setTimeout(() => qrCopy.textContent = "🔗 링크 복사", 2000);
   });
 
   // ── 초기값 ──
