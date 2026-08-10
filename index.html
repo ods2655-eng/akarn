@@ -137,6 +137,25 @@
   li.next .t { color: var(--accent); font-weight: 700; }
   .hint { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 12px; }
 
+  /* 접속 안내 팝업 */
+  .connect-popup {
+    position: fixed; inset: 0; z-index: 45; display: none;
+    background: rgba(0,0,0,.65);
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .connect-popup.on { display: flex; }
+  .connect-popup .connect-box {
+    width: 100%; max-width: 460px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 20px; padding: 32px 24px;
+    text-align: center;
+  }
+  .connect-emoji { font-size: 14vmin; line-height: 1; }
+  .connect-title { font-size: 6vmin; font-weight: 800; margin: 2vmin 0 3vmin;
+    color: var(--accent); word-break: keep-all; }
+  .connect-msg { font-size: 4.4vmin; line-height: 1.5; margin-bottom: 4vmin;
+    word-break: keep-all; }
+  #connectOk { font-size: 4.6vmin; padding: 3vmin; }
+
   /* QR 팝업 */
   .qr-popup {
     position: fixed; inset: 0; z-index: 40; display: none;
@@ -207,6 +226,16 @@
   </div>
 </div>
 
+<!-- 접속(QR 연결) 안내 팝업 -->
+<div class="connect-popup" id="connectPopup">
+  <div class="connect-box">
+    <div class="connect-emoji">⏱️</div>
+    <div class="connect-title">코너 타이머가 시작됩니다</div>
+    <div class="connect-msg">조장은 조의 모든 친구들이 있는지 확인하고<br>이동을 준비해주세요</div>
+    <button id="connectOk">확인 · 소리 켜기 🔊</button>
+  </div>
+</div>
+
 <!-- QR 코드 팝업 -->
 <div class="qr-popup" id="qrPopup">
   <div class="qr-box">
@@ -233,6 +262,7 @@
   const startEl = $("start"), schedEl = $("sched");
   const armBtn = $("arm"), disarmBtn = $("disarm"), shareBtn = $("share");
   const gearBtn = $("gear"), panel = $("panel"), closeBtn = $("close"), soundHint = $("soundHint");
+  const connectPopup = $("connectPopup"), connectOk = $("connectOk");
   const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg");
   const WEEK = ["일","월","화","수","목","금","토"];
 
@@ -426,13 +456,19 @@
   // 공유받은 사람: 셋팅 없이 자동 무장. 소리만 첫 탭에서 켜지도록 안내+대기
   function autoArmFromLink(hh, mm) {
     armSchedule(hh, mm);
+    connectPopup.classList.add("on");     // 접속 안내 문구 표시
     if (!audioUnlocked) {
-      soundHint.classList.add("on");
       const onGesture = () => { unlockAudio(); };
       window.addEventListener("pointerdown", onGesture, { once: true });
       window.addEventListener("keydown", onGesture, { once: true });
     }
   }
+  // 접속 안내 "확인" → 소리 켜기(사용자 제스처) + 팝업 닫기
+  connectOk.addEventListener("click", () => {
+    unlockAudio();
+    connectPopup.classList.remove("on");
+    if (!audioUnlocked) soundHint.classList.add("on");  // 혹시 소리 못 켰으면 배너로 재안내
+  });
   armBtn.addEventListener("click", () => {
     const t = parseTimeInput();
     if (!t) { statusEl.className = "status idle"; statusEl.textContent = "시작 시각을 입력하세요"; return; }
