@@ -1,0 +1,387 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>동시 알람 · 10분 간격 4회</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #1a1d24; --fg: #e8eaed; --muted: #9aa0aa;
+    --accent: #4f8cff; --ok: #35c759; --warn: #ff9f0a; --line: #2a2e37;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f2f4f8; --card:#fff; --fg:#1a1d24; --muted:#6b7280; --line:#e2e6ee; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+  }
+
+  /* ── 대형 디스플레이(항상 보이는 화면) ── */
+  .display {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center; padding: 2vmin;
+  }
+  .now-label {
+    font-size: 3.2vmin; letter-spacing: .5vmin; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 1vmin;
+  }
+  .clock {
+    font-size: min(30vw, 46vh); font-weight: 800; line-height: .95;
+    letter-spacing: .3vmin; font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .clock .sec { font-size: 0.32em; color: var(--muted); font-weight: 600;
+    vertical-align: baseline; }
+  .now-date {
+    font-size: 5vmin; color: var(--muted); margin-top: 1.5vmin;
+    font-variant-numeric: tabular-nums;
+  }
+  .status {
+    font-size: 4.2vmin; color: var(--accent); margin-top: 2.5vmin;
+    font-weight: 700; min-height: 5vmin;
+  }
+  .status.idle { color: var(--muted); font-weight: 500; }
+  .status .cd-label { font-size: 3.4vmin; color: var(--muted); font-weight: 600; }
+  .status .cd-time {
+    display: block; font-size: 9vmin; font-weight: 800; line-height: 1.1;
+    color: var(--accent); font-variant-numeric: tabular-nums; margin-top: .3vmin;
+  }
+  .status .cd-next { font-size: 3vmin; color: var(--muted); font-weight: 500; }
+
+  /* ── 알람 발생 시 전체 화면 번쩍 ── */
+  .ring-overlay {
+    position: fixed; inset: 0; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: var(--warn); color: #1a1d24; z-index: 50; text-align: center;
+    animation: softpulse 1.6s ease-in-out infinite;
+  }
+  .ring-overlay.on { display: flex; }
+  .ring-overlay .bell { font-size: 22vmin; line-height: 1;
+    animation: bellsway 1.6s ease-in-out infinite; }
+  .ring-overlay .txt { font-size: 8vmin; font-weight: 800; margin-top: 2vmin;
+    max-width: 92vw; line-height: 1.3; word-break: keep-all; }
+  .ring-overlay .sub { font-size: 6vmin; font-weight: 700; margin-top: 2vmin; }
+  /* 은은한 점멸 — 급격한 반전 대신 밝기만 부드럽게 오르내림 */
+  @keyframes softpulse { 0%,100% { background: #f0910a; } 50% { background: #ffd24d; } }
+  @keyframes bellsway { 0%,100% { transform: scale(1); opacity: .9; }
+                        50% { transform: scale(1.08); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .ring-overlay, .ring-overlay .bell { animation-duration: 2.4s; }
+  }
+
+  /* ── 설정 열기 버튼(⚙) ── */
+  .gear {
+    position: fixed; top: 2vmin; right: 2vmin; z-index: 20;
+    width: 8vmin; height: 8vmin; min-width: 44px; min-height: 44px;
+    border-radius: 50%; border: 1px solid var(--line);
+    background: var(--card); color: var(--muted);
+    font-size: 4vmin; cursor: pointer; opacity: .55;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gear:active { transform: scale(.94); }
+
+  /* ── 설정 패널(기본 숨김) ── */
+  .panel {
+    position: fixed; inset: 0; z-index: 30; display: none;
+    background: rgba(0,0,0,.55);
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .panel.on { display: flex; }
+  .panel .box {
+    width: 100%; max-width: 420px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 16px; padding: 20px;
+    max-height: 90vh; overflow: auto;
+  }
+  .panel h2 { margin: 0 0 4px; font-size: 18px; display: flex;
+    justify-content: space-between; align-items: center; }
+  .panel .close { background: none; border: none; color: var(--muted);
+    font-size: 24px; cursor: pointer; width: auto; padding: 0 4px; }
+  .row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
+  label { font-size: 14px; color: var(--muted); min-width: 82px; }
+  input[type=time] {
+    flex: 1; font-size: 20px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+  button {
+    width: 100%; font-size: 18px; font-weight: 700; padding: 15px;
+    border: none; border-radius: 12px; color: #fff; background: var(--accent);
+    cursor: pointer;
+  }
+  button:active { transform: scale(.98); }
+  button.stop { background: #444a57; }
+  .btn-sub { background: transparent; color: var(--accent); font-size: 14px;
+    padding: 10px; margin-top: 6px; font-weight: 600; }
+  ul.sched { list-style: none; padding: 0; margin: 12px 0 0; }
+  ul.sched li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 11px 4px; border-top: 1px solid var(--line); font-size: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+  ul.sched li:first-child { border-top: none; }
+  li.done { opacity: .45; } li.done .t { text-decoration: line-through; }
+  li.next .t { color: var(--accent); font-weight: 700; }
+  .hint { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 12px; }
+</style>
+
+<!-- 대형 디스플레이 -->
+<div class="display">
+  <div class="now-label">현재 시간</div>
+  <div class="clock" id="clock">--:--<span class="sec" id="sec">:--</span></div>
+  <div class="now-date" id="nowDate">----년 --월 --일</div>
+  <div class="status idle" id="status">우측 ⚙ 에서 알람을 설정하세요</div>
+</div>
+
+<!-- 알람 발생 오버레이 -->
+<div class="ring-overlay" id="overlay">
+  <div class="bell">🔔</div>
+  <div class="txt" id="overlayMsg">각 조의 조장을 따라서 이동을 시작합니다</div>
+  <div class="sub" id="overlaySub"></div>
+</div>
+
+<!-- 설정 열기 -->
+<button class="gear" id="gear" title="설정">⚙</button>
+
+<!-- 설정 패널 -->
+<div class="panel" id="panel">
+  <div class="box">
+    <h2>알람 설정 <button class="close" id="close">×</button></h2>
+    <div class="row">
+      <label for="start">시작 시각</label>
+      <input type="time" id="start" step="60">
+    </div>
+    <button id="arm">알람 시작</button>
+    <button id="disarm" class="stop" style="display:none">알람 정지</button>
+    <button id="share" class="btn-sub">🔗 이 시작 시각으로 공유 링크 복사</button>
+    <ul class="sched" id="sched"></ul>
+    <div class="hint">
+      · 여러 기기가 <b>같은 시작 시각</b>으로 각자 “알람 시작”을 누르면
+        기기 시계 기준으로 <b>동시에</b> 울립니다 (10분 간격 4회).<br>
+      · 시작 시각이 지났으면 <b>다음 날 같은 시각</b>으로 잡힙니다.<br>
+      · 모바일은 “알람 시작” 1회 터치가 있어야 소리가 납니다(브라우저 정책).
+        화면은 켜진 상태로 유지됩니다.
+    </div>
+    <div class="hint" id="warnCtx" style="display:none; color:var(--warn)">
+      ⚠️ 지금 주소에서는 <b>화면 절전 방지가 동작하지 않습니다</b>
+      (https 또는 localhost가 아님). 화면이 꺼지면 알람이 안 울릴 수 있으니,
+      기기의 화면 자동꺼짐을 꺼두거나 https/localhost로 접속하세요.
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const INTERVAL_MIN = 10, COUNT = 4, BEEP_TIMES = 4;
+  const OVERLAY_MS = 10000;   // 문구·점멸 송출 시간(10초)
+  // 회차별 문구 — 필요하면 각 줄을 다르게 바꾸면 됨
+  const MOVE_MSG = "각 조의 조장을 따라서 이동을 시작합니다";
+  const MESSAGES = [MOVE_MSG, MOVE_MSG, MOVE_MSG, MOVE_MSG];
+  const $ = (id) => document.getElementById(id);
+  const clockEl = $("clock"), secEl = $("sec"), statusEl = $("status"), nowDateEl = $("nowDate");
+  const startEl = $("start"), schedEl = $("sched");
+  const armBtn = $("arm"), disarmBtn = $("disarm"), shareBtn = $("share");
+  const gearBtn = $("gear"), panel = $("panel"), closeBtn = $("close");
+  const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg");
+  const WEEK = ["일","월","화","수","목","금","토"];
+
+  let audioCtx = null, armed = false, ringTimes = [], firedIdx = -1, wakeLock = null;
+
+  // ── 오디오 ──
+  function ensureAudio() {
+    if (!audioCtx) { const AC = window.AudioContext || window.webkitAudioContext; audioCtx = new AC(); }
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  function beepOnce(when, dur, freq) {
+    const ctx = audioCtx, osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.type = "square"; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.0001, when);
+    gain.gain.exponentialRampToValueAtTime(0.4, when + 0.02);
+    gain.gain.setValueAtTime(0.4, when + dur - 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(when); osc.stop(when + dur + 0.02);
+  }
+  function ring() {
+    const ctx = ensureAudio(), t0 = ctx.currentTime + 0.05;
+    for (let i = 0; i < BEEP_TIMES; i++) beepOnce(t0 + i * 0.5, 0.28, i % 2 ? 660 : 880);
+    if (navigator.vibrate) navigator.vibrate([250,150,250,150,250,150,250]);
+  }
+  function showOverlay(n) {
+    overlayMsg.textContent = MESSAGES[n - 1] || MOVE_MSG;   // 회차별 문구
+    overlaySub.textContent = `${n}회 / ${COUNT}회`;
+    overlay.classList.add("on");
+    setTimeout(() => overlay.classList.remove("on"), OVERLAY_MS);  // 10초 송출
+    startTitleBlink(n);   // 배경 탭에서도 알아채도록 탭 제목/파비콘 점멸
+  }
+
+  // ── 배경(다른 창) 알림: 탭 제목 + 파비콘 점멸 ──
+  const baseTitle = document.title;
+  let titleTimer = null, favLink = null;
+  function ensureFav() {
+    if (!favLink) {
+      favLink = document.querySelector("link[rel~='icon']");
+      if (!favLink) { favLink = document.createElement("link"); favLink.rel = "icon"; document.head.appendChild(favLink); }
+    }
+    return favLink;
+  }
+  function setFavicon(on) {
+    const c = document.createElement("canvas"); c.width = c.height = 32;
+    const x = c.getContext("2d");
+    x.fillStyle = on ? "#ff9f0a" : "#3a3f48";
+    x.beginPath(); x.arc(16, 16, 15, 0, Math.PI * 2); x.fill();
+    x.font = "20px system-ui"; x.textAlign = "center"; x.textBaseline = "middle";
+    x.fillText("🔔", 16, 18);
+    ensureFav().href = c.toDataURL("image/png");
+  }
+  function startTitleBlink(n) {
+    stopTitleBlink();
+    let on = false;
+    const flip = () => {
+      on = !on;
+      document.title = on ? `🔔 알람! (${n}/${COUNT}회)` : "▶ 화면을 확인하세요";
+      setFavicon(on);
+    };
+    flip();
+    titleTimer = setInterval(flip, 900);
+  }
+  function stopTitleBlink() {
+    if (!titleTimer) return;
+    clearInterval(titleTimer); titleTimer = null;
+    document.title = baseTitle; setFavicon(false);
+  }
+
+  // ── 스케줄 ──
+  function computeRingTimes(hh, mm) {
+    const now = new Date(), first = new Date();
+    first.setHours(hh, mm, 0, 0);
+    if (first.getTime() <= now.getTime() - 1000) first.setDate(first.getDate() + 1);
+    const arr = [];
+    for (let i = 0; i < COUNT; i++) arr.push(new Date(first.getTime() + i * INTERVAL_MIN * 60000));
+    return arr;
+  }
+  const two = (n) => String(n).padStart(2, "0");
+  const hm = (d) => two(d.getHours()) + ":" + two(d.getMinutes());
+  function fmtRemain(s) {            // 60분 넘어도 안 깨지게 H:MM:SS
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return (h > 0 ? h + ":" + two(m) : two(m)) + ":" + two(sec);
+  }
+
+  function renderSched() {
+    if (!ringTimes.length) { schedEl.innerHTML = ""; return; }
+    const now = Date.now();
+    let nextIdx = ringTimes.findIndex((d) => d.getTime() > now);
+    schedEl.innerHTML = ringTimes.map((d, i) => {
+      const past = d.getTime() <= now;
+      const cls = past ? "done" : (i === nextIdx ? "next" : "");
+      const st = past ? "완료" : (i === nextIdx ? "다음" : "대기");
+      return `<li class="${cls}"><span class="t">${i + 1}회 · ${hm(d)}</span><span class="st">${st}</span></li>`;
+    }).join("");
+  }
+
+  // ── Wake Lock ──
+  async function requestWake() {
+    try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      stopTitleBlink();                       // 탭으로 돌아오면 점멸 중지
+      if (armed && !wakeLock) requestWake();
+    }
+  });
+  window.addEventListener("focus", stopTitleBlink);
+
+  // ── 메인 루프 ──
+  function tick() {
+    const now = new Date();
+    clockEl.firstChild.nodeValue = hm(now);
+    secEl.textContent = ":" + two(now.getSeconds());
+    nowDateEl.textContent = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 (${WEEK[now.getDay()]})`;
+
+    if (armed) {
+      const nowMs = now.getTime();
+      for (let i = firedIdx + 1; i < ringTimes.length; i++) {
+        if (nowMs >= ringTimes[i].getTime()) { firedIdx = i; ring(); showOverlay(i + 1); }
+        else break;
+      }
+      renderSched();
+      const next = ringTimes.find((d) => d.getTime() > nowMs);
+      if (next) {
+        const s = Math.max(0, Math.round((next.getTime() - nowMs) / 1000));
+        const remainIdx = ringTimes.indexOf(next) + 1;
+        statusEl.className = "status";
+        statusEl.innerHTML =
+          `<span class="cd-label">다음 알람까지 (${remainIdx}/${COUNT}회)</span>` +
+          `<span class="cd-time">${fmtRemain(s)}</span>` +
+          `<span class="cd-next">${hm(next)} 예정</span>`;
+      } else if (firedIdx >= COUNT - 1) {
+        statusEl.className = "status idle";
+        statusEl.textContent = "✅ 4회 알람 완료";
+        armed = false;
+        armBtn.style.display = ""; disarmBtn.style.display = "none";
+        if (wakeLock) { wakeLock.release(); wakeLock = null; }
+      }
+    }
+  }
+
+  // ── 설정 패널 열고 닫기 ──
+  gearBtn.addEventListener("click", () => panel.classList.add("on"));
+  closeBtn.addEventListener("click", () => panel.classList.remove("on"));
+  panel.addEventListener("click", (e) => { if (e.target === panel) panel.classList.remove("on"); });
+
+  // ── 버튼 ──
+  function parseTimeInput() {
+    const v = startEl.value; if (!v) return null;
+    const [h, m] = v.split(":").map(Number); return { h, m };
+  }
+  armBtn.addEventListener("click", () => {
+    const t = parseTimeInput();
+    if (!t) { statusEl.className = "status idle"; statusEl.textContent = "시작 시각을 입력하세요"; return; }
+    ensureAudio();
+    beepOnce(audioCtx.currentTime + 0.01, 0.02, 440); // 오디오 잠금 해제
+    ringTimes = computeRingTimes(t.h, t.m); firedIdx = -1; armed = true;
+    requestWake();
+    armBtn.style.display = "none"; disarmBtn.style.display = "";
+    renderSched();
+    statusEl.className = "status";
+    statusEl.textContent = `설정됨 · 첫 알람 ${hm(ringTimes[0])}`;
+    panel.classList.remove("on"); // 큰 화면으로 복귀
+  });
+  disarmBtn.addEventListener("click", () => {
+    armed = false; ringTimes = []; firedIdx = -1;
+    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    armBtn.style.display = ""; disarmBtn.style.display = "none";
+    schedEl.innerHTML = "";
+    statusEl.className = "status idle"; statusEl.textContent = "우측 ⚙ 에서 알람을 설정하세요";
+  });
+  shareBtn.addEventListener("click", async () => {
+    const v = startEl.value;
+    if (!v) return;
+    const url = location.origin + location.pathname + "?t=" + encodeURIComponent(v);
+    try { await navigator.clipboard.writeText(url); shareBtn.textContent = "✅ 링크 복사됨"; }
+    catch (e) { shareBtn.textContent = url; }
+    setTimeout(() => shareBtn.textContent = "🔗 이 시작 시각으로 공유 링크 복사", 2500);
+  });
+
+  // ── 초기값 ──
+  (function init() {
+    const q = new URLSearchParams(location.search).get("t");
+    if (q && /^\d{1,2}:\d{2}$/.test(q)) startEl.value = q.length === 4 ? "0" + q : q;
+    else {
+      const d = new Date();
+      d.setMinutes(Math.ceil((d.getMinutes() + 1) / 10) * 10, 0, 0);
+      startEl.value = hm(d);
+    }
+    if (!window.isSecureContext || !("wakeLock" in navigator)) {
+      const w = document.getElementById("warnCtx");
+      if (w) w.style.display = "";
+    }
+    tick();
+    setInterval(tick, 250);   // rAF 대신 — 백그라운드 탭에서도 계속 돎
+  })();
+})();
+</script>
