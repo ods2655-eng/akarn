@@ -358,6 +358,8 @@
   disarmBtn.addEventListener("click", () => {
     armed = false; ringTimes = []; firedIdx = -1;
     if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    stopTitleBlink();                       // 정지 시 탭 제목 깜빡임도 즉시 중지
+    overlay.classList.remove("on");
     armBtn.style.display = ""; disarmBtn.style.display = "none";
     schedEl.innerHTML = "";
     statusEl.className = "status idle"; statusEl.textContent = "우측 ⚙ 에서 알람을 설정하세요";
