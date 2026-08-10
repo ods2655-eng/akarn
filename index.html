@@ -177,16 +177,27 @@
   .qr-popup.on { display: flex; }
   .qr-popup .qr-box {
     width: 100%; height: 100%; max-width: 100%; background: var(--bg);
-    border: none; border-radius: 0; padding: 3vmin;
+    border: none; border-radius: 0; padding: 4vmin;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; overflow: auto;
+    gap: 3vmin; text-align: center; overflow: auto;
   }
+  .qr-info { display: flex; flex-direction: column; align-items: center; gap: 2.5vmin;
+    order: -1; }  /* 세로 화면: 문구를 QR 위로 */
   .qr-title { font-size: 5vmin; font-weight: 800; line-height: 1.4;
-    word-break: keep-all; margin-bottom: 3vmin; color: var(--fg); }
-  .qr-img-wrap { background: #fff; border-radius: 20px; padding: 2.5vmin; line-height: 0; }
-  .qr-img-wrap img { width: min(66vh, 88vw); height: min(66vh, 88vw); display: block; }
-  .qr-link { font-size: 2.4vmin; color: var(--muted); word-break: break-all;
-    margin: 3vmin 0 2vmin; font-family: ui-monospace, monospace; max-width: 90vw; }
+    word-break: keep-all; color: var(--fg); }
+  .qr-img-wrap { background: #fff; border-radius: 20px; padding: 2.5vmin; line-height: 0; flex: none; }
+  .qr-img-wrap img { width: min(58vh, 86vw); height: min(58vh, 86vw); display: block; }
+  .qr-link { font-size: 2.2vmin; color: var(--muted); word-break: break-all;
+    font-family: ui-monospace, monospace; max-width: 86vw; }
+
+  /* 가로 화면(PC): QR 왼쪽 · 문구/링크/버튼 오른쪽 */
+  @media (orientation: landscape) {
+    .qr-popup .qr-box { flex-direction: row; gap: 6vmin; justify-content: center; }
+    .qr-info { order: 0; align-items: flex-start; text-align: left; max-width: 44vw; }
+    .qr-title { text-align: left; font-size: 4vmin; }
+    .qr-img-wrap img { width: min(84vh, 46vw); height: min(84vh, 46vw); }
+    .qr-link { font-size: 1.8vmin; max-width: 44vw; }
+  }
   .qr-close-x {
     position: fixed; top: 3vmin; right: 3vmin; z-index: 41;
     width: 11vmin; height: 11vmin; min-width: 48px; min-height: 48px;
@@ -274,12 +285,14 @@
 <div class="qr-popup" id="qrPopup">
   <button class="qr-close-x" id="qrClose">×</button>
   <div class="qr-box">
-    <div class="qr-title">카메라앱을 열고 화면의 QR을 통해<br>오토타이머를 연결해주세요</div>
     <div class="qr-img-wrap"><img id="qrImg" alt="QR 코드"></div>
-    <div class="qr-link" id="qrLink"></div>
-    <button id="qrCopy">🔗 링크 복사</button>
-    <div class="hint" id="qrErr" style="display:none; color:var(--warn)">
-      ⚠️ QR 이미지를 불러오지 못했습니다(인터넷 확인). 아래 링크를 직접 전달하세요.
+    <div class="qr-info">
+      <div class="qr-title">카메라앱을 열고 화면의 QR을 통해<br>오토타이머를 연결해주세요</div>
+      <div class="qr-link" id="qrLink"></div>
+      <button id="qrCopy">🔗 링크 복사</button>
+      <div class="hint" id="qrErr" style="display:none; color:var(--warn)">
+        ⚠️ QR 이미지를 불러오지 못했습니다(인터넷 확인). 아래 링크를 직접 전달하세요.
+      </div>
     </div>
   </div>
 </div>
