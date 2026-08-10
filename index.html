@@ -198,10 +198,14 @@
   }
   function beepOnce(when, dur, freq) {
     const ctx = audioCtx, osc = ctx.createOscillator(), gain = ctx.createGain();
+    when = Math.max(when, ctx.currentTime + 0.005);   // 음수/과거 시간 방지
+    const attack = Math.min(0.02, dur / 4);            // 짧은 dur에서도 시간이 음수가 안 되게
+    const release = Math.min(0.04, dur / 2);
+    const hold = when + Math.max(attack, dur - release);
     osc.type = "square"; osc.frequency.value = freq;
     gain.gain.setValueAtTime(0.0001, when);
-    gain.gain.exponentialRampToValueAtTime(0.4, when + 0.02);
-    gain.gain.setValueAtTime(0.4, when + dur - 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.4, when + attack);
+    gain.gain.setValueAtTime(0.4, hold);
     gain.gain.exponentialRampToValueAtTime(0.0001, when + dur);
     osc.connect(gain).connect(ctx.destination);
     osc.start(when); osc.stop(when + dur + 0.02);
