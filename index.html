@@ -490,6 +490,7 @@
   // 공유받은 사람: 셋팅 없이 자동 무장. 소리만 첫 탭에서 켜지도록 안내+대기
   function autoArmFromLink(hh, mm) {
     armSchedule(hh, mm);
+    gearBtn.style.display = "none";       // 공유(뷰어) 기기는 설정 버튼 숨김
     connectPopup.classList.add("on");     // 접속 안내 문구 표시
     if (!audioUnlocked) {
       const onGesture = () => { unlockAudio(); };
