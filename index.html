@@ -220,7 +220,7 @@
 <!-- 알람 발생 오버레이 -->
 <div class="ring-overlay" id="overlay">
   <div class="bell">🔔</div>
-  <div class="txt" id="overlayMsg">각 조의 조장을 따라서 이동을 시작합니다</div>
+  <div class="txt" id="overlayMsg">서로 양보하고 질서있게 이동해요!<br>조장은 모든 조원이 이동장소까지<br>이동할 수 있도록 도와주세요!</div>
   <div class="sub" id="overlaySub"></div>
 </div>
 
@@ -303,7 +303,7 @@
   const INTERVAL_MIN = 10, COUNT = 4, BEEP_TIMES = 4;
   const OVERLAY_MS = 10000;   // 문구·점멸 송출 시간(10초)
   // 회차별 문구 — 필요하면 각 줄을 다르게 바꾸면 됨
-  const MOVE_MSG = "각 조의 조장을 따라서 이동을 시작합니다";
+  const MOVE_MSG = "서로 양보하고 질서있게 이동해요!<br>조장은 모든 조원이 이동장소까지<br>이동할 수 있도록 도와주세요!";
   const MESSAGES = [MOVE_MSG, MOVE_MSG, MOVE_MSG, MOVE_MSG];
   const $ = (id) => document.getElementById(id);
   const clockEl = $("clock"), secEl = $("sec"), statusEl = $("status"), nowDateEl = $("nowDate");
@@ -351,7 +351,7 @@
     soundToggle.closest(".sound-toggle").classList.toggle("off", !on);
   });
   function showOverlay(n) {
-    overlayMsg.textContent = MESSAGES[n - 1] || MOVE_MSG;   // 회차별 문구
+    overlayMsg.innerHTML = MESSAGES[n - 1] || MOVE_MSG;   // 회차별 문구(줄바꿈 <br> 반영)
     overlaySub.textContent = `${n}회 / ${COUNT}회`;
     overlay.classList.add("on");
     setTimeout(() => overlay.classList.remove("on"), OVERLAY_MS);  // 10초 송출
