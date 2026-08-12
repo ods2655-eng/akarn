@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>동시 알람 · 10분 간격 4회</title>
+<title>동시 알람 · 20분 간격 2회</title>
 <style>
   :root {
     --bg: #0f1115; --card: #1a1d24; --fg: #e8eaed; --muted: #9aa0aa;
@@ -63,7 +63,7 @@
   }
   .prog-fill {
     height: 100%; width: 0%; border-radius: 999px;
-    background: linear-gradient(90deg, var(--accent), var(--ok));
+    background: linear-gradient(90deg, #ff9f0a, #ff4d94, #a24bff);  /* 주황→핑크→보라 */
     transition: width .3s linear;
   }
   .walker {
@@ -71,6 +71,13 @@
     font-size: 8vmin; line-height: 1; transform: translateX(-50%);
     transition: left .3s linear; animation: kidsbob .45s ease-in-out infinite;
   }
+  /* 결승점 벨 — 남은시간이 줄수록 더 빠르게 흔들림 */
+  .prog-bell {
+    position: absolute; right: 0; bottom: 100%; margin-bottom: 1vmin;
+    font-size: 8vmin; line-height: 1; transform-origin: 50% 10%;
+    animation: bellswing 1.2s ease-in-out infinite;
+  }
+  @keyframes bellswing { 0%,100% { transform: rotate(-14deg); } 50% { transform: rotate(14deg); } }
 
   /* ── 알람 발생 시 전체 화면 번쩍 ── */
   .ring-overlay {
@@ -253,6 +260,7 @@
   <div class="prog-track">
     <div class="prog-fill" id="progFill"></div>
     <div class="walker" id="walker">🧒</div>
+    <div class="prog-bell" id="progBell">🔔</div>
   </div>
 </div>
 
@@ -289,7 +297,7 @@
     <div class="hint">
       · <b>관리자</b>: 시작 시각 입력 → “알람 시작” → “🔗 공유 링크 복사”로 링크 배포.<br>
       · <b>공유받은 사람</b>: 링크만 열면 <b>셋팅 없이 자동으로</b> 같은 시각 알람이 걸립니다.
-        (기기 시계 기준으로 <b>동시에</b> 울림 · 10분 간격 4회)<br>
+        (기기 시계 기준으로 <b>동시에</b> 울림 · 20분 간격 2회)<br>
       · 소리만은 브라우저 정책상 <b>화면을 한 번 터치/클릭</b>해야 켜집니다
         (안내 배너가 뜸). 화면은 켜진 상태로 유지됩니다.<br>
       · 시작 시각이 지났으면 <b>다음 날 같은 시각</b>으로 잡힙니다.
@@ -340,7 +348,7 @@
 <script>
 (function () {
   "use strict";
-  const INTERVAL_MIN = 10, COUNT = 4, BEEP_TIMES = 4;
+  const INTERVAL_MIN = 20, COUNT = 2, BEEP_TIMES = 4;
   const OVERLAY_MS = 10000;   // 문구·점멸 송출 시간(10초)
   // 회차별 문구 — 필요하면 각 줄을 다르게 바꾸면 됨
   const MOVE_MSG = "다음 장소로 이동을 시작합니다<br>빠트린 물건이 없는지 확인!";
@@ -354,7 +362,7 @@
   const connectStep1 = $("connectStep1"), connectStep2 = $("connectStep2");
   const soundToggle = $("soundToggle"), soundState = $("soundState");
   const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg");
-  const progWrap = $("progWrap"), progFill = $("progFill"), walker = $("walker");
+  const progWrap = $("progWrap"), progFill = $("progFill"), walker = $("walker"), progBell = $("progBell");
   const PROG_SEC = 120;   // 진행바 표시 구간: 다음 알람 2분 전부터
   const WEEK = ["일","월","화","수","목","금","토"];
 
@@ -523,12 +531,14 @@
           progWrap.classList.add("on");
           progFill.style.width = pct + "%";
           walker.style.left = pct + "%";
+          // 벨: 남은시간이 줄수록 더 빠르게 흔들림 (1.3s → 0.25s)
+          progBell.style.animationDuration = Math.max(0.25, 1.3 - 1.05 * pct / 100).toFixed(2) + "s";
         } else {
           progWrap.classList.remove("on");
         }
       } else if (firedIdx >= COUNT - 1) {
         statusEl.className = "status idle";
-        statusEl.textContent = "✅ 4회 알람 완료";
+        statusEl.textContent = `✅ ${COUNT}회 알람 완료`;
         armed = false;
         progWrap.classList.remove("on");
         armBtn.style.display = ""; disarmBtn.style.display = "none";
