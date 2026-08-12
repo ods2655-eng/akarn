@@ -51,6 +51,27 @@
   }
   .status .cd-next { font-size: 3vmin; color: var(--muted); font-weight: 500; }
 
+  /* ── 다음 알람 2분 전 진행바 (막대 + 걸어가는 어린이) ── */
+  .prog-wrap {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+    display: none; padding: 0 4vmin 4vmin;
+  }
+  .prog-wrap.on { display: block; }
+  .prog-track {
+    position: relative; height: 3.2vmin; border-radius: 999px;
+    background: var(--line); overflow: visible;
+  }
+  .prog-fill {
+    height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--ok));
+    transition: width .3s linear;
+  }
+  .walker {
+    position: absolute; left: 0%; bottom: 100%; margin-bottom: 1vmin;
+    font-size: 8vmin; line-height: 1; transform: translateX(-50%);
+    transition: left .3s linear; animation: kidsbob .45s ease-in-out infinite;
+  }
+
   /* ── 알람 발생 시 전체 화면 번쩍 ── */
   .ring-overlay {
     position: fixed; inset: 0; display: none;
@@ -227,6 +248,14 @@
   <div class="status idle" id="status">우측 ⚙ 에서 알람을 설정하세요</div>
 </div>
 
+<!-- 다음 알람 2분 전 진행바 (막대그래프 + 걸어가는 어린이) -->
+<div class="prog-wrap" id="progWrap">
+  <div class="prog-track">
+    <div class="prog-fill" id="progFill"></div>
+    <div class="walker" id="walker">🧒</div>
+  </div>
+</div>
+
 <!-- 알람 발생 오버레이 -->
 <div class="ring-overlay" id="overlay">
   <div class="bell">🔔</div>
@@ -325,6 +354,8 @@
   const connectStep1 = $("connectStep1"), connectStep2 = $("connectStep2");
   const soundToggle = $("soundToggle"), soundState = $("soundState");
   const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg");
+  const progWrap = $("progWrap"), progFill = $("progFill"), walker = $("walker");
+  const PROG_SEC = 120;   // 진행바 표시 구간: 다음 알람 2분 전부터
   const WEEK = ["일","월","화","수","목","금","토"];
 
   let audioCtx = null, armed = false, ringTimes = [], firedIdx = -1, wakeLock = null, audioUnlocked = false;
@@ -485,10 +516,21 @@
           `<span class="cd-label">다음 알람까지 (${remainIdx}/${COUNT}회)</span>` +
           `<span class="cd-time">${fmtRemain(s)}</span>` +
           `<span class="cd-next">${hm(next)}${dayTag(next)} 예정</span>`;
+        // 다음 알람 2분 전부터 하단 막대그래프 채우고 어린이가 오른쪽으로 걸어감
+        const toNext = (next.getTime() - nowMs) / 1000;
+        if (toNext <= PROG_SEC) {
+          const pct = Math.min(100, Math.max(0, (1 - toNext / PROG_SEC) * 100));
+          progWrap.classList.add("on");
+          progFill.style.width = pct + "%";
+          walker.style.left = pct + "%";
+        } else {
+          progWrap.classList.remove("on");
+        }
       } else if (firedIdx >= COUNT - 1) {
         statusEl.className = "status idle";
         statusEl.textContent = "✅ 4회 알람 완료";
         armed = false;
+        progWrap.classList.remove("on");
         armBtn.style.display = ""; disarmBtn.style.display = "none";
         if (wakeLock) { wakeLock.release(); wakeLock = null; }
       }
@@ -580,6 +622,7 @@
     stopTitleBlink();                       // 정지 시 탭 제목 깜빡임도 즉시 중지
     overlay.classList.remove("on");
     soundHint.classList.remove("on");
+    progWrap.classList.remove("on");
     armBtn.style.display = ""; disarmBtn.style.display = "none";
     schedEl.innerHTML = "";
     statusEl.className = "status idle"; statusEl.textContent = "우측 ⚙ 에서 알람을 설정하세요";
