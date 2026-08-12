@@ -245,6 +245,18 @@
   }
   .qr-close-x:active { transform: scale(.94); }
   #qrCopy { font-size: 3vmin; padding: 2vmin 5vmin; width: auto; max-width: 90vw; }
+  /* 설정 입력(횟수·간격·문구) */
+  .row.col { flex-direction: column; align-items: stretch; gap: 6px; }
+  .row input[type=number] { flex: 1; font-size: 18px; padding: 10px 12px;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  #msgInput { width: 100%; font-size: 16px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+    font-family: inherit; resize: vertical; }
+  /* 완료 후 다시 시작 버튼 */
+  .restart-btn { margin-top: 4vmin; width: auto; align-self: center;
+    font-size: 4vmin; padding: 2.4vmin 6vmin; border-radius: 999px;
+    background: var(--accent); color: #fff; font-weight: 700; border: none; cursor: pointer; }
+  .restart-btn:active { transform: scale(.97); }
 </style>
 
 <!-- 대형 디스플레이 -->
@@ -253,6 +265,7 @@
   <div class="clock" id="clock">--:--<span class="sec" id="sec">:--</span></div>
   <div class="now-date" id="nowDate">----년 --월 --일</div>
   <div class="status idle" id="status">우측 ⚙ 에서 알람을 설정하세요</div>
+  <button id="restartBtn" class="restart-btn" style="display:none">🔄 다시 시작</button>
 </div>
 
 <!-- 다음 알람 2분 전 진행바 (막대그래프 + 걸어가는 어린이) -->
@@ -286,6 +299,19 @@
       <label for="start">시작 시각</label>
       <input type="time" id="start" step="60">
     </div>
+    <div class="row">
+      <label for="cntInput">알람 횟수</label>
+      <input type="number" id="cntInput" min="1" max="12" step="1" value="2">
+    </div>
+    <div class="row">
+      <label for="ivInput">간격(분)</label>
+      <input type="number" id="ivInput" min="1" max="120" step="1" value="20">
+    </div>
+    <div class="row col">
+      <label for="msgInput">알람 문구</label>
+      <textarea id="msgInput" rows="2">다음 장소로 이동을 시작합니다
+빠트린 물건이 없는지 확인!</textarea>
+    </div>
     <button id="arm">알람 시작</button>
     <button id="disarm" class="stop" style="display:none">알람 정지</button>
     <label class="sound-toggle">
@@ -296,8 +322,8 @@
     <ul class="sched" id="sched"></ul>
     <div class="hint">
       · <b>관리자</b>: 시작 시각 입력 → “알람 시작” → “🔗 공유 링크 복사”로 링크 배포.<br>
-      · <b>공유받은 사람</b>: 링크만 열면 <b>셋팅 없이 자동으로</b> 같은 시각 알람이 걸립니다.
-        (기기 시계 기준으로 <b>동시에</b> 울림 · 20분 간격 2회)<br>
+      · <b>공유받은 사람</b>: 링크만 열면 <b>셋팅 없이 자동으로</b> 같은 설정(횟수·간격·문구)이 적용됩니다.
+        (기기 시계 기준으로 <b>동시에</b> 울림 · 아래에서 횟수·간격·문구 조절)<br>
       · 소리만은 브라우저 정책상 <b>화면을 한 번 터치/클릭</b>해야 켜집니다
         (안내 배너가 뜸). 화면은 켜진 상태로 유지됩니다.<br>
       · 시작 시각이 지났으면 <b>다음 날 같은 시각</b>으로 잡힙니다.
@@ -348,14 +374,19 @@
 <script>
 (function () {
   "use strict";
-  const INTERVAL_MIN = 20, COUNT = 2, BEEP_TIMES = 4;
   const OVERLAY_MS = 10000;   // 문구·점멸 송출 시간(10초)
-  // 회차별 문구 — 필요하면 각 줄을 다르게 바꾸면 됨
-  const MOVE_MSG = "다음 장소로 이동을 시작합니다<br>빠트린 물건이 없는지 확인!";
-  const MESSAGES = [MOVE_MSG, MOVE_MSG, MOVE_MSG, MOVE_MSG];
+  // 설정값(관리자 ⚙에서 조절 · 공유 링크로 전달) — 기본값
+  let INTERVAL_MIN = 20, COUNT = 2;
+  let MOVE_MSG = "다음 장소로 이동을 시작합니다<br>빠트린 물건이 없는지 확인!";
+  const brToNl = (s) => String(s).replace(/<br\s*\/?>/gi, "\n");
+  const nlToBr = (s) => String(s).replace(/\n/g, "<br>");
+  // 시계 오차 보정: 서버 시각과의 차(ms). syncClock()으로 채움
+  let serverOffset = 0;
+  const nowTs = () => Date.now() + serverOffset;
   const $ = (id) => document.getElementById(id);
   const clockEl = $("clock"), secEl = $("sec"), statusEl = $("status"), nowDateEl = $("nowDate");
   const startEl = $("start"), schedEl = $("sched");
+  const cntInput = $("cntInput"), ivInput = $("ivInput"), msgInput = $("msgInput"), restartBtn = $("restartBtn");
   const armBtn = $("arm"), disarmBtn = $("disarm"), shareBtn = $("share");
   const gearBtn = $("gear"), panel = $("panel"), closeBtn = $("close"), soundHint = $("soundHint");
   const connectPopup = $("connectPopup"), connectOk = $("connectOk");
@@ -366,7 +397,7 @@
   const PROG_SEC = 120;   // 진행바 표시 구간: 다음 알람 2분 전부터
   const WEEK = ["일","월","화","수","목","금","토"];
 
-  let audioCtx = null, armed = false, ringTimes = [], firedIdx = -1, wakeLock = null, audioUnlocked = false;
+  let audioCtx = null, armed = false, ringTimes = [], firedIdx = -1, wakeLock = null, audioUnlocked = false, completeTimer = null;
 
   // ── 오디오 ──
   function ensureAudio() {
@@ -410,7 +441,7 @@
     soundToggle.closest(".sound-toggle").classList.toggle("off", !on);
   });
   function showOverlay(n) {
-    overlayMsg.innerHTML = MESSAGES[n - 1] || MOVE_MSG;   // 회차별 문구(줄바꿈 <br> 반영)
+    overlayMsg.innerHTML = MOVE_MSG;   // 설정된 알람 문구(줄바꿈 <br> 반영)
     overlaySub.textContent = `${n}회 / ${COUNT}회`;
     overlay.classList.add("on");
     setTimeout(() => overlay.classList.remove("on"), OVERLAY_MS);  // 10초 송출
@@ -455,7 +486,7 @@
 
   // ── 스케줄 ──
   function computeRingTimes(hh, mm) {
-    const now = Date.now(), first = new Date();
+    const now = nowTs(), first = new Date(nowTs());
     first.setHours(hh, mm, 0, 0);
     const span = (COUNT - 1) * INTERVAL_MIN * 60000;   // 첫~마지막 알람 간격
     // 4회 전체가 이미 지났을 때만 다음 날로 (일부만 지났으면 오늘 유지 → 늦게 접속해도 남은 회차 동기화)
@@ -471,7 +502,7 @@
     return (h > 0 ? h + ":" + two(m) : two(m)) + ":" + two(sec);
   }
   function dayTag(d) {              // 오늘이 아니면 (내일)/(M/D) 표시 → 기기 간 날짜 불일치 즉시 확인
-    const now = new Date(), tmr = new Date(); tmr.setDate(now.getDate() + 1);
+    const now = new Date(nowTs()), tmr = new Date(nowTs()); tmr.setDate(now.getDate() + 1);
     if (d.toDateString() === now.toDateString()) return "";
     if (d.toDateString() === tmr.toDateString()) return " (내일)";
     return ` (${d.getMonth() + 1}/${d.getDate()})`;
@@ -479,7 +510,7 @@
 
   function renderSched() {
     if (!ringTimes.length) { schedEl.innerHTML = ""; return; }
-    const now = Date.now();
+    const now = nowTs();
     let nextIdx = ringTimes.findIndex((d) => d.getTime() > now);
     schedEl.innerHTML = ringTimes.map((d, i) => {
       const past = d.getTime() <= now;
@@ -503,7 +534,7 @@
 
   // ── 메인 루프 ──
   function tick() {
-    const now = new Date();
+    const now = new Date(nowTs());
     clockEl.firstChild.nodeValue = hm(now);
     secEl.textContent = ":" + two(now.getSeconds());
     nowDateEl.textContent = `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 (${WEEK[now.getDay()]})`;
@@ -541,6 +572,8 @@
         statusEl.textContent = `✅ ${COUNT}회 알람 완료`;
         armed = false;
         progWrap.classList.remove("on");
+        restartBtn.style.display = "";                    // 다시 시작 버튼 노출
+        if (!completeTimer) completeTimer = setTimeout(resetToIdle, 60000);  // 60초 뒤 자동 대기화면
         armBtn.style.display = ""; disarmBtn.style.display = "none";
         if (wakeLock) { wakeLock.release(); wakeLock = null; }
       }
@@ -571,7 +604,7 @@
   function armSchedule(hh, mm) {
     ringTimes = computeRingTimes(hh, mm);
     // 늦게 접속한 사람: 이미 지난 회차는 울리지 않도록 firedIdx 초기화 → 남은 회차만 동기화
-    const now = Date.now();
+    const now = nowTs();
     firedIdx = -1;
     for (let i = 0; i < ringTimes.length; i++) { if (ringTimes[i].getTime() <= now) firedIdx = i; }
     armed = true;
@@ -619,31 +652,57 @@
     if (!audioUnlocked) soundHint.classList.add("on");  // 혹시 소리 못 켰으면 배너로 재안내
     setTimeout(() => connectPopup.classList.remove("on"), 2200);  // 2.2초 뒤 자동 닫힘
   });
-  armBtn.addEventListener("click", () => {
-    const t = parseTimeInput();
-    if (!t) { statusEl.className = "status idle"; statusEl.textContent = "시작 시각을 입력하세요"; return; }
-    unlockAudio();
-    armSchedule(t.h, t.m);
-    panel.classList.remove("on"); // 큰 화면으로 복귀
-  });
-  disarmBtn.addEventListener("click", () => {
+  // 설정 입력값 → 실제 설정 반영(횟수·간격·문구)
+  function applyConfigFromInputs() {
+    const c = parseInt(cntInput.value, 10), iv = parseInt(ivInput.value, 10);
+    if (c >= 1) COUNT = Math.min(12, c);
+    if (iv >= 1) INTERVAL_MIN = Math.min(120, iv);
+    const raw = (msgInput.value || "").trim();
+    if (raw) MOVE_MSG = nlToBr(raw);
+  }
+  // 대기 화면으로 초기화(정지/완료 공용)
+  function resetToIdle() {
     armed = false; ringTimes = []; firedIdx = -1;
     if (wakeLock) { wakeLock.release(); wakeLock = null; }
-    stopTitleBlink();                       // 정지 시 탭 제목 깜빡임도 즉시 중지
-    overlay.classList.remove("on");
-    soundHint.classList.remove("on");
-    progWrap.classList.remove("on");
+    if (completeTimer) { clearTimeout(completeTimer); completeTimer = null; }
+    stopTitleBlink();
+    overlay.classList.remove("on"); soundHint.classList.remove("on"); progWrap.classList.remove("on");
+    restartBtn.style.display = "none";
     armBtn.style.display = ""; disarmBtn.style.display = "none";
     schedEl.innerHTML = "";
     statusEl.className = "status idle"; statusEl.textContent = "우측 ⚙ 에서 알람을 설정하세요";
+  }
+  // 서버 시각으로 기기 시계 오차 보정
+  function syncClock() {
+    fetch(location.href, { method: "HEAD", cache: "no-store" })
+      .then((r) => { const d = r.headers.get("date"); if (d) { const t = new Date(d).getTime(); if (t) serverOffset = t - Date.now(); } })
+      .catch(() => {});
+  }
+  restartBtn.addEventListener("click", () => {
+    resetToIdle();
+    if (gearBtn.style.display !== "none") panel.classList.add("on");  // 관리자면 설정창 열어줌
   });
+  armBtn.addEventListener("click", () => {
+    const t = parseTimeInput();
+    if (!t) { statusEl.className = "status idle"; statusEl.textContent = "시작 시각을 입력하세요"; return; }
+    applyConfigFromInputs();
+    unlockAudio();
+    restartBtn.style.display = "none";
+    armSchedule(t.h, t.m);
+    panel.classList.remove("on"); // 큰 화면으로 복귀
+  });
+  disarmBtn.addEventListener("click", resetToIdle);
   // ── 공유: QR 코드 팝업 ──
   const qrPopup = $("qrPopup"), qrImg = $("qrImg"), qrLink = $("qrLink"),
         qrCopy = $("qrCopy"), qrClose = $("qrClose"), qrErr = $("qrErr");
   function shareUrl() {
     const v = startEl.value;
     if (!v) return null;
-    return location.origin + location.pathname + "?t=" + encodeURIComponent(v);
+    applyConfigFromInputs();   // 현재 설정 반영
+    const p = new URLSearchParams();
+    p.set("t", v); p.set("n", String(COUNT)); p.set("iv", String(INTERVAL_MIN));
+    p.set("msg", brToNl(MOVE_MSG));
+    return location.origin + location.pathname + "?" + p.toString();
   }
   shareBtn.addEventListener("click", () => {
     const url = shareUrl();
@@ -665,14 +724,23 @@
 
   // ── 초기값 ──
   (function init() {
-    const q = new URLSearchParams(location.search).get("t");
+    syncClock();
+    setInterval(syncClock, 5 * 60000);   // 5분마다 시계 재보정
+    const params = new URLSearchParams(location.search);
+    // 링크에 담긴 설정 반영(횟수·간격·문구)
+    const n = parseInt(params.get("n"), 10); if (n >= 1) COUNT = Math.min(12, n);
+    const iv = parseInt(params.get("iv"), 10); if (iv >= 1) INTERVAL_MIN = Math.min(120, iv);
+    const linkMsg = params.get("msg"); if (linkMsg) MOVE_MSG = nlToBr(linkMsg);
+    // 입력칸에 현재 설정 채우기
+    cntInput.value = COUNT; ivInput.value = INTERVAL_MIN; msgInput.value = brToNl(MOVE_MSG);
+    const q = params.get("t");
     if (q && /^\d{1,2}:\d{2}$/.test(q)) {
       const v = q.length === 4 ? "0" + q : q;
       startEl.value = v;
-      const [h, m] = v.split(":").map(Number);
-      autoArmFromLink(h, m);   // 공유 링크로 열면 셋팅 없이 자동 무장
+      const [h, mm2] = v.split(":").map(Number);
+      autoArmFromLink(h, mm2);   // 공유 링크로 열면 셋팅 없이 자동 무장
     } else {
-      const d = new Date();
+      const d = new Date(nowTs());
       d.setMinutes(Math.ceil((d.getMinutes() + 1) / 10) * 10, 0, 0);
       startEl.value = hm(d);
     }
