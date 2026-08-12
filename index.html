@@ -68,8 +68,18 @@
   @keyframes softpulse { 0%,100% { background: #f0910a; } 50% { background: #ffd24d; } }
   @keyframes bellsway { 0%,100% { transform: scale(1); opacity: .9; }
                         50% { transform: scale(1.08); opacity: 1; } }
+  /* 어린이 이동 모션 — 좌→우로 걸어가며 통통 튀는 효과 */
+  .ring-overlay .kids-lane { width: 100%; overflow: hidden; margin-top: 3vmin; }
+  .ring-overlay .kids-walk { display: inline-block; will-change: transform;
+    animation: kidswalk 4s linear infinite; }
+  .ring-overlay .kids-bob { font-size: 13vmin; line-height: 1; white-space: nowrap;
+    animation: kidsbob .45s ease-in-out infinite; }
+  @keyframes kidswalk { from { transform: translateX(-65vw); } to { transform: translateX(65vw); } }
+  @keyframes kidsbob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1.4vmin); } }
   @media (prefers-reduced-motion: reduce) {
     .ring-overlay, .ring-overlay .bell { animation-duration: 2.4s; }
+    .ring-overlay .kids-walk { animation-duration: 8s; }
+    .ring-overlay .kids-bob { animation: none; }
   }
 
   /* ── 설정 열기 버튼(⚙) ── */
@@ -220,8 +230,9 @@
 <!-- 알람 발생 오버레이 -->
 <div class="ring-overlay" id="overlay">
   <div class="bell">🔔</div>
-  <div class="txt" id="overlayMsg">서로 양보하고 질서있게 이동해요!<br>조장은 모든 조원이 이동장소까지<br>이동할 수 있도록 도와주세요!</div>
+  <div class="txt" id="overlayMsg">다음 장소로 이동을 시작합니다<br>빠트린 물건이 없는지 확인!</div>
   <div class="sub" id="overlaySub"></div>
+  <div class="kids-lane"><div class="kids-walk"><div class="kids-bob">🧒👦👧🧒👦👧</div></div></div>
 </div>
 
 <!-- 설정 열기 -->
@@ -303,7 +314,7 @@
   const INTERVAL_MIN = 10, COUNT = 4, BEEP_TIMES = 4;
   const OVERLAY_MS = 10000;   // 문구·점멸 송출 시간(10초)
   // 회차별 문구 — 필요하면 각 줄을 다르게 바꾸면 됨
-  const MOVE_MSG = "서로 양보하고 질서있게 이동해요!<br>조장은 모든 조원이 이동장소까지<br>이동할 수 있도록 도와주세요!";
+  const MOVE_MSG = "다음 장소로 이동을 시작합니다<br>빠트린 물건이 없는지 확인!";
   const MESSAGES = [MOVE_MSG, MOVE_MSG, MOVE_MSG, MOVE_MSG];
   const $ = (id) => document.getElementById(id);
   const clockEl = $("clock"), secEl = $("sec"), statusEl = $("status"), nowDateEl = $("nowDate");
@@ -338,12 +349,21 @@
     osc.connect(gain).connect(ctx.destination);
     osc.start(when); osc.stop(when + dur + 0.02);
   }
+  function soundDingDong() {   // 띵동~ 띵동~ (2회)
+    const ctx = ensureAudio(), t = ctx.currentTime + 0.05;
+    [[659.25, 0], [523.25, 0.34], [659.25, 0.85], [523.25, 1.19]].forEach(([f, dt]) => {  // 띵(E5)-동(C5)
+      const o = ctx.createOscillator(), g = ctx.createGain(), s = t + dt;
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.exponentialRampToValueAtTime(0.5, s + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + 0.5);
+      o.connect(g).connect(ctx.destination);
+      o.start(s); o.stop(s + 0.52);
+    });
+  }
   function ring() {
-    if (soundToggle.checked) {   // 알림 소리 on/off (관리자 체크박스)
-      const ctx = ensureAudio(), t0 = ctx.currentTime + 0.05;
-      for (let i = 0; i < BEEP_TIMES; i++) beepOnce(t0 + i * 0.5, 0.28, i % 2 ? 660 : 880);
-    }
-    if (navigator.vibrate) navigator.vibrate([250,150,250,150,250,150,250]);
+    if (soundToggle.checked) { ensureAudio(); soundDingDong(); }   // 띵동 알림음
+    if (navigator.vibrate) navigator.vibrate([200, 120, 200]);
   }
   soundToggle.addEventListener("change", () => {
     const on = soundToggle.checked;
