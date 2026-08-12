@@ -68,14 +68,6 @@
   @keyframes softpulse { 0%,100% { background: #f0910a; } 50% { background: #ffd24d; } }
   @keyframes bellsway { 0%,100% { transform: scale(1); opacity: .9; }
                         50% { transform: scale(1.08); opacity: 1; } }
-  /* 이동시작: 달리는 모션(좌우 이동), 게임시작: 벨 흔들림 */
-  .ring-overlay .bell.mo-run { animation: runmove .6s ease-in-out infinite; }
-  .ring-overlay .bell.mo-bell { animation: bellring .45s ease-in-out infinite; }
-  @keyframes runmove { 0% { transform: translateX(-14%); } 50% { transform: translateX(14%); } 100% { transform: translateX(-14%); } }
-  @keyframes bellring { 0%,100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
-  /* 게임시작 오버레이: 빨강 부저 느낌 */
-  .ring-overlay.start { color: #fff; animation: startflash .5s ease-in-out infinite; }
-  @keyframes startflash { 0%,100% { background: #e5484d; } 50% { background: #ff8a8d; } }
   @media (prefers-reduced-motion: reduce) {
     .ring-overlay, .ring-overlay .bell { animation-duration: 2.4s; }
   }
@@ -227,8 +219,8 @@
 
 <!-- 알람 발생 오버레이 -->
 <div class="ring-overlay" id="overlay">
-  <div class="bell" id="overlayEmoji">🔔</div>
-  <div class="txt" id="overlayMsg">다음 장소로<br>이동을 시작합니다</div>
+  <div class="bell">🔔</div>
+  <div class="txt" id="overlayMsg">서로 양보하고 질서있게 이동해요!<br>조장은 모든 조원이 이동장소까지<br>이동할 수 있도록 도와주세요!</div>
   <div class="sub" id="overlaySub"></div>
 </div>
 
@@ -243,7 +235,7 @@
   <div class="box">
     <h2>알람 설정 <button class="close" id="close">×</button></h2>
     <div class="row">
-      <label for="start">게임 시작 시각</label>
+      <label for="start">시작 시각</label>
       <input type="time" id="start" step="60">
     </div>
     <button id="arm">알람 시작</button>
@@ -255,12 +247,12 @@
     <button id="share" class="btn-sub">🔗 공유 링크 · QR 코드 만들기</button>
     <ul class="sched" id="sched"></ul>
     <div class="hint">
-      · <b>관리자</b>: 게임 시작 시각 입력 → “알람 시작” → “🔗 공유” QR/링크 배포.<br>
-      · <b>순서</b>: 게임시작 <b>2분 전 = 이동시작</b>(띵동), <b>정각 = 게임시작</b>(부저) 2회 순차.<br>
-      · <b>공유받은 사람</b>: 링크만 열면 <b>셋팅 없이 자동</b>으로 같은 시각에 <b>동시</b> 작동.<br>
-      · 소리만은 브라우저 정책상 <b>화면을 한 번 터치/클릭</b>해야 켜집니다(안내 배너).
-        화면은 켜진 상태로 유지됩니다.<br>
-      · 게임시작 시각이 지났으면 <b>다음 날 같은 시각</b>으로 잡힙니다.
+      · <b>관리자</b>: 시작 시각 입력 → “알람 시작” → “🔗 공유 링크 복사”로 링크 배포.<br>
+      · <b>공유받은 사람</b>: 링크만 열면 <b>셋팅 없이 자동으로</b> 같은 시각 알람이 걸립니다.
+        (기기 시계 기준으로 <b>동시에</b> 울림 · 10분 간격 4회)<br>
+      · 소리만은 브라우저 정책상 <b>화면을 한 번 터치/클릭</b>해야 켜집니다
+        (안내 배너가 뜸). 화면은 켜진 상태로 유지됩니다.<br>
+      · 시작 시각이 지났으면 <b>다음 날 같은 시각</b>으로 잡힙니다.
     </div>
     <div class="hint" id="warnCtx" style="display:none; color:var(--warn)">
       ⚠️ 지금 주소에서는 <b>화면 절전 방지가 동작하지 않습니다</b>
@@ -308,16 +300,11 @@
 <script>
 (function () {
   "use strict";
+  const INTERVAL_MIN = 10, COUNT = 4, BEEP_TIMES = 4;
   const OVERLAY_MS = 10000;   // 문구·점멸 송출 시간(10초)
-  // 게임 시작 시각(정각) 기준 이벤트 — offsetMin: 게임시작 대비 분
-  //   1회차 이동시작(-2분), 2회차 게임시작(정각). (예령 -3분은 필요 시 추가)
-  const EVENTS = [
-    { label: "이동시작", offsetMin: -2, emoji: "🏃‍♂️🏃‍♀️", motion: "mo-run",
-      msg: "다음 장소로<br>이동을 시작합니다", sound: "ding", cls: "" },
-    { label: "게임시작", offsetMin: 0, emoji: "🔔", motion: "mo-bell",
-      msg: "Game start!", sound: "buzzer", cls: "start" },
-  ];
-  const COUNT = EVENTS.length;
+  // 회차별 문구 — 필요하면 각 줄을 다르게 바꾸면 됨
+  const MOVE_MSG = "서로 양보하고 질서있게 이동해요!<br>조장은 모든 조원이 이동장소까지<br>이동할 수 있도록 도와주세요!";
+  const MESSAGES = [MOVE_MSG, MOVE_MSG, MOVE_MSG, MOVE_MSG];
   const $ = (id) => document.getElementById(id);
   const clockEl = $("clock"), secEl = $("sec"), statusEl = $("status"), nowDateEl = $("nowDate");
   const startEl = $("start"), schedEl = $("sched");
@@ -326,7 +313,7 @@
   const connectPopup = $("connectPopup"), connectOk = $("connectOk");
   const connectStep1 = $("connectStep1"), connectStep2 = $("connectStep2");
   const soundToggle = $("soundToggle"), soundState = $("soundState");
-  const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg"), overlayEmoji = $("overlayEmoji");
+  const overlay = $("overlay"), overlaySub = $("overlaySub"), overlayMsg = $("overlayMsg");
   const WEEK = ["일","월","화","수","목","금","토"];
 
   let audioCtx = null, armed = false, ringTimes = [], firedIdx = -1, wakeLock = null, audioUnlocked = false;
@@ -351,55 +338,24 @@
     osc.connect(gain).connect(ctx.destination);
     osc.start(when); osc.stop(when + dur + 0.02);
   }
-  function soundDing() {          // 띵동 알림 (이동시작)
-    const ctx = audioCtx, t = ctx.currentTime + 0.03;
-    [[783.99, 0], [523.25, 0.2]].forEach(([f, dt]) => {   // 딩(G5)-동(C5)
-      const o = ctx.createOscillator(), g = ctx.createGain(), s = t + dt;
-      o.type = "sine"; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, s);
-      g.gain.exponentialRampToValueAtTime(0.5, s + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, s + 0.45);
-      o.connect(g).connect(ctx.destination);
-      o.start(s); o.stop(s + 0.47);
-    });
-  }
-  function soundBuzzer() {         // 스타트 부저 (게임시작)
-    const ctx = audioCtx, t0 = ctx.currentTime + 0.03;
-    for (let i = 0; i < 3; i++) {
-      const o = ctx.createOscillator(), g = ctx.createGain(), s = t0 + i * 0.3;
-      o.type = "sawtooth"; o.frequency.value = 200;
-      g.gain.setValueAtTime(0.0001, s);
-      g.gain.exponentialRampToValueAtTime(0.55, s + 0.01);
-      g.gain.setValueAtTime(0.55, s + 0.22);
-      g.gain.exponentialRampToValueAtTime(0.0001, s + 0.26);
-      o.connect(g).connect(ctx.destination);
-      o.start(s); o.stop(s + 0.28);
+  function ring() {
+    if (soundToggle.checked) {   // 알림 소리 on/off (관리자 체크박스)
+      const ctx = ensureAudio(), t0 = ctx.currentTime + 0.05;
+      for (let i = 0; i < BEEP_TIMES; i++) beepOnce(t0 + i * 0.5, 0.28, i % 2 ? 660 : 880);
     }
-  }
-  function ring(idx) {
-    const ev = EVENTS[idx];
-    if (soundToggle.checked && ev.sound) {   // 알림 소리 on/off (관리자 체크박스)
-      ensureAudio();
-      if (ev.sound === "ding") soundDing();
-      else if (ev.sound === "buzzer") soundBuzzer();
-    }
-    if (navigator.vibrate)
-      navigator.vibrate(ev.sound === "buzzer" ? [300,120,300,120,300] : [180,90,180]);
+    if (navigator.vibrate) navigator.vibrate([250,150,250,150,250,150,250]);
   }
   soundToggle.addEventListener("change", () => {
     const on = soundToggle.checked;
     soundState.textContent = on ? "켜짐" : "꺼짐";
     soundToggle.closest(".sound-toggle").classList.toggle("off", !on);
   });
-  function showOverlay(idx) {
-    const ev = EVENTS[idx];
-    overlayEmoji.textContent = ev.emoji;
-    overlayEmoji.className = "bell " + ev.motion;         // 이벤트별 모션
-    overlayMsg.innerHTML = ev.msg;                        // 이벤트별 문구
-    overlaySub.textContent = `${idx + 1} / ${COUNT} · ${ev.label}`;
-    overlay.className = "ring-overlay on" + (ev.cls ? " " + ev.cls : "");
+  function showOverlay(n) {
+    overlayMsg.innerHTML = MESSAGES[n - 1] || MOVE_MSG;   // 회차별 문구(줄바꿈 <br> 반영)
+    overlaySub.textContent = `${n}회 / ${COUNT}회`;
+    overlay.classList.add("on");
     setTimeout(() => overlay.classList.remove("on"), OVERLAY_MS);  // 10초 송출
-    startTitleBlink(ev.label);   // 배경 탭에서도 알아채도록 탭 제목/파비콘 점멸
+    startTitleBlink(n);   // 배경 탭에서도 알아채도록 탭 제목/파비콘 점멸
   }
 
   // ── 배경(다른 창) 알림: 탭 제목 + 파비콘 점멸 ──
@@ -421,12 +377,12 @@
     x.fillText("🔔", 16, 18);
     ensureFav().href = c.toDataURL("image/png");
   }
-  function startTitleBlink(label) {
+  function startTitleBlink(n) {
     stopTitleBlink();
     let on = false;
     const flip = () => {
       on = !on;
-      document.title = on ? `🔔 ${label}!` : "▶ 화면을 확인하세요";
+      document.title = on ? `🔔 알람! (${n}/${COUNT}회)` : "▶ 화면을 확인하세요";
       setFavicon(on);
     };
     flip();
@@ -440,12 +396,14 @@
 
   // ── 스케줄 ──
   function computeRingTimes(hh, mm) {
-    const now = Date.now(), base = new Date();  // base = 게임 시작 시각(정각)
-    base.setHours(hh, mm, 0, 0);
-    // 마지막 이벤트(게임시작, offset 0)까지 지났을 때만 다음 날로
-    const lastMs = base.getTime() + EVENTS[EVENTS.length - 1].offsetMin * 60000;
-    if (lastMs <= now - 1000) base.setDate(base.getDate() + 1);
-    return EVENTS.map((e) => new Date(base.getTime() + e.offsetMin * 60000));
+    const now = Date.now(), first = new Date();
+    first.setHours(hh, mm, 0, 0);
+    const span = (COUNT - 1) * INTERVAL_MIN * 60000;   // 첫~마지막 알람 간격
+    // 4회 전체가 이미 지났을 때만 다음 날로 (일부만 지났으면 오늘 유지 → 늦게 접속해도 남은 회차 동기화)
+    if (first.getTime() + span <= now - 1000) first.setDate(first.getDate() + 1);
+    const arr = [];
+    for (let i = 0; i < COUNT; i++) arr.push(new Date(first.getTime() + i * INTERVAL_MIN * 60000));
+    return arr;
   }
   const two = (n) => String(n).padStart(2, "0");
   const hm = (d) => two(d.getHours()) + ":" + two(d.getMinutes());
@@ -468,7 +426,7 @@
       const past = d.getTime() <= now;
       const cls = past ? "done" : (i === nextIdx ? "next" : "");
       const st = past ? "완료" : (i === nextIdx ? "다음" : "대기");
-      return `<li class="${cls}"><span class="t">${EVENTS[i].label} · ${hm(d)}${dayTag(d)}</span><span class="st">${st}</span></li>`;
+      return `<li class="${cls}"><span class="t">${i + 1}회 · ${hm(d)}</span><span class="st">${st}</span></li>`;
     }).join("");
   }
 
@@ -494,22 +452,22 @@
     if (armed) {
       const nowMs = now.getTime();
       for (let i = firedIdx + 1; i < ringTimes.length; i++) {
-        if (nowMs >= ringTimes[i].getTime()) { firedIdx = i; ring(i); showOverlay(i); }
+        if (nowMs >= ringTimes[i].getTime()) { firedIdx = i; ring(); showOverlay(i + 1); }
         else break;
       }
       renderSched();
       const next = ringTimes.find((d) => d.getTime() > nowMs);
       if (next) {
         const s = Math.max(0, Math.round((next.getTime() - nowMs) / 1000));
-        const remainIdx = ringTimes.indexOf(next);
+        const remainIdx = ringTimes.indexOf(next) + 1;
         statusEl.className = "status";
         statusEl.innerHTML =
-          `<span class="cd-label">${EVENTS[remainIdx].label}까지</span>` +
+          `<span class="cd-label">다음 알람까지 (${remainIdx}/${COUNT}회)</span>` +
           `<span class="cd-time">${fmtRemain(s)}</span>` +
           `<span class="cd-next">${hm(next)}${dayTag(next)} 예정</span>`;
       } else if (firedIdx >= COUNT - 1) {
         statusEl.className = "status idle";
-        statusEl.textContent = "✅ 게임 시작 완료";
+        statusEl.textContent = "✅ 4회 알람 완료";
         armed = false;
         armBtn.style.display = ""; disarmBtn.style.display = "none";
         if (wakeLock) { wakeLock.release(); wakeLock = null; }
