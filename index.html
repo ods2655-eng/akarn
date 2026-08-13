@@ -52,11 +52,12 @@
   .status .cd-next { font-size: 3vmin; color: var(--muted); font-weight: 500; }
 
   /* ── 다음 알람 2분 전 진행바 (막대 + 걸어가는 어린이) ── */
-  .prog-wrap {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
-    display: none; padding: 0 4vmin 4vmin;
-  }
+  .bottom-stack { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; }
+  .prog-wrap { position: relative; display: none; padding: 0 4vmin 1.5vmin; }
   .prog-wrap.on { display: block; }
+  .verse { text-align: center; padding: 1.8vmin 4vmin 2.4vmin; color: var(--muted);
+    font-size: 2.7vmin; line-height: 1.55; word-break: keep-all; }
+  .verse-ref { display: block; margin-top: .8vmin; font-size: 2.2vmin; opacity: .8; }
   .prog-track {
     position: relative; height: 3.2vmin; border-radius: 999px;
     background: var(--line); overflow: visible;
@@ -268,12 +269,19 @@
   <button id="restartBtn" class="restart-btn" style="display:none">🔄 다시 시작</button>
 </div>
 
-<!-- 다음 알람 2분 전 진행바 (막대그래프 + 걸어가는 어린이) -->
-<div class="prog-wrap" id="progWrap">
-  <div class="prog-track">
-    <div class="prog-fill" id="progFill"></div>
-    <img class="walker" id="walker" src="heart.png" alt="GOGO 대모험">
-    <div class="prog-bell" id="progBell">🔔</div>
+<!-- 하단 스택: 진행바 + 성경 문구 -->
+<div class="bottom-stack">
+  <div class="prog-wrap" id="progWrap">
+    <div class="prog-track">
+      <div class="prog-fill" id="progFill"></div>
+      <img class="walker" id="walker" src="heart.png" alt="GOGO 대모험">
+      <div class="prog-bell" id="progBell">🔔</div>
+    </div>
+  </div>
+  <div class="verse">
+    새 계명을 너희에게 주노니 서로 사랑하라<br>
+    내가 너희를 사랑한 것 같이 너희도 서로 사랑하라
+    <span class="verse-ref">— 요한복음 13장 34절</span>
   </div>
 </div>
 
